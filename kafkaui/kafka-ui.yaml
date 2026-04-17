@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-ui
+  labels:
+    app: kafka-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-ui
+  template:
+    metadata:
+      labels:
+        app: kafka-ui
+    spec:
+      containers:
+      - name: kafka-ui
+        image: provectuslabs/kafka-ui:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: KAFKA_CLUSTERS_0_NAME
+          value: "my-cluster"  # 任意の表示名
+        - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
+          value: "my-cluster-kafka-bootstrap:9092" # Kafkaのサービス名:ポート
+        - name: KAFKA_CLUSTERS_0_READONLY
+          value: "false" # UIからのトピック削除などを許可するか
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-ui
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+  selector:
+    app: kafka-ui
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: kafka-ui
+spec:
+  to:
+    kind: Service
+    name: kafka-ui
+  port:
+    targetPort: 8080
+  tls:
+    termination: edge # HTTPS化
+    
