@@ -40,4 +40,10 @@ spec:
                   requests:
                     storage: 500Mi
           - name: docker-credentials
-            emptyDir: {}
+            volumeClaimTemplate:
+              spec:
+                accessModes:
+                  - ReadWriteOnce
+                resources:
+                  requests:
+                    storage: 10Mi
