@@ -1,0 +1,30 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: plc-waveform-manual-run
+spec:
+  pipelineRef:
+    name: plc-waveform-pipeline
+  taskRunTemplate:
+    serviceAccountName: pipeline
+  params:
+    - name: git-url
+      value: https://github.com/shayashi1225/my-node-app.git  # ← 実際のリポジトリ URL に変更
+    - name: git-revision
+      value: main
+    - name: image-name
+      value: image-registry.openshift-image-registry.svc:5000/plc-waveform/plc-waveform
+    - name: image-tag
+      value: latest
+  workspaces:
+    - name: source
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 500Mi
+    - name: docker-credentials
+      secret:
+        secretName: registry-credentials

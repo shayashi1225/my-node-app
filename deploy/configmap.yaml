@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: plc-waveform-config
+  labels:
+    app: plc-waveform
+data:
+  USE_MOCK: "false"
+  PORT: "3000"
+  DB_PATH: /app/data/data.db
+  # Strimzi (AMQ Streams) を使う場合の典型的なブローカーアドレス
+  # 複数ブローカーはカンマ区切り: "broker-0:9092,broker-1:9092"
+  KAFKA_BROKERS: "my-cluster-kafka-bootstrap.kafka.svc:9092"
+  KAFKA_CLIENT_ID: "visualizer"
+  KAFKA_GROUP_ID: "viz-group"

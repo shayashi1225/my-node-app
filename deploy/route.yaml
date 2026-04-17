@@ -1,0 +1,15 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: plc-waveform
+  labels:
+    app: plc-waveform
+spec:
+  to:
+    kind: Service
+    name: plc-waveform
+  port:
+    targetPort: 3000
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

@@ -1,0 +1,29 @@
+apiVersion: triggers.tekton.dev/v1beta1
+kind: EventListener
+metadata:
+  name: plc-waveform-listener
+spec:
+  serviceAccountName: pipeline
+  triggers:
+    - name: github-push
+      interceptors:
+        - ref:
+            name: github
+          params:
+            - name: secretRef
+              value:
+                secretName: github-webhook-secret
+                secretKey: secret
+            - name: eventTypes
+              value:
+                - push
+        - ref:
+            name: cel
+          params:
+            # main ブランチへの push のみトリガー
+            - name: filter
+              value: body.ref == 'refs/heads/main'
+      bindings:
+        - ref: plc-waveform-github-binding
+      template:
+        ref: plc-waveform-trigger-template

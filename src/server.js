@@ -49,8 +49,12 @@ const io = new Server(server);
 
 const startKafka = async () => {
   const { Kafka } = require('kafkajs');
-  const kafka = new Kafka({ clientId: 'visualizer', brokers: ['localhost:9092'] });
-  const consumer = kafka.consumer({ groupId: 'viz-group' });
+  const brokers = (process.env.KAFKA_BROKERS || 'localhost:9092').split(',');
+  const kafka = new Kafka({
+    clientId: process.env.KAFKA_CLIENT_ID || 'visualizer',
+    brokers,
+  });
+  const consumer = kafka.consumer({ groupId: process.env.KAFKA_GROUP_ID || 'viz-group' });
 
   await consumer.connect();
   await consumer.subscribe({ topic: 'factory-data',   fromBeginning: false });
@@ -87,7 +91,8 @@ const startMock = () => {
 };
 
 if (require.main === module) {
-  server.listen(3000, () => console.log('Server running at http://localhost:3000'));
+  const port = Number(process.env.PORT || 3000);
+  server.listen(port, () => console.log(`Server running at http://localhost:${port}`));
 
   if (process.env.USE_MOCK === 'true') {
     startMock();
