@@ -29,7 +29,7 @@ docker run -d --name kafka -p 9092:9092 apache/kafka:latest
 
 PLCセンサーのリアルタイム波形ビジュアライザー。
 
-```
+```text
 [Kafka: factory-data] → src/server.js (KafkaJS consumer)
                               ↓ Socket.IO (waveform-data イベント)
                         src/index.html (uPlot でリアルタイム描画)
@@ -41,8 +41,14 @@ PLCセンサーのリアルタイム波形ビジュアライザー。
 
 - **メッセージ形式**: `{ ts: number (Unix ms), value: number }`
 - `src/server.js` が Kafka の `factory-data` トピックをコンシュームし、`waveform-data` イベントとして Socket.IO でブロードキャスト
-- `src/index.html` は Socket.IO クライアントでイベントを受信し、uPlot のスライディングウィンドウ（MAX_POINTS=500点）でグラフを更新
+- `src/index.html` は CDN から読み込んだ Socket.IO クライアントと uPlot でイベントを受信し、スライディングウィンドウ（MAX_POINTS=500点）でグラフを更新
 - uPlot は秒単位の Unix タイムスタンプを要求するため、クライアント側で `ts / 1000` に変換している
+
+### 実装上の注意
+
+- HTTP サーバーは Express を使わず Node.js 標準の `http` モジュールで実装されている
+- Kafka ブローカーアドレス（`localhost:9092`）・clientId（`visualizer`）・groupId（`viz-group`）は `server.js` にハードコードされており、環境変数での変更は不可
+- `server.js` は `{ handleData, server }` をエクスポートしており、テストから直接インポートして利用する
 
 ### 閾値永続化
 
