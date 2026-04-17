@@ -2,7 +2,8 @@
 // Kafka が起動している環境で factory-data / factory-data-2 トピックへ疑似PLCデータを流す
 const { Kafka } = require('kafkajs');
 
-const kafka = new Kafka({ clientId: 'mock-producer', brokers: ['localhost:9092'] });
+const brokers = (process.env.KAFKA_BROKERS || 'localhost:9092').split(',');
+const kafka = new Kafka({ clientId: process.env.KAFKA_CLIENT_ID || 'mock-producer', brokers });
 const producer = kafka.producer();
 
 const INTERVAL_MS = 100;

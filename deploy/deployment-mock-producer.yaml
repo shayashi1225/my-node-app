@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: plc-mock-producer
+  labels:
+    app: plc-mock-producer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: plc-mock-producer
+  template:
+    metadata:
+      labels:
+        app: plc-mock-producer
+    spec:
+      containers:
+        - name: plc-mock-producer
+          image: image-registry.openshift-image-registry.svc:5000/plc-waveform/plc-waveform:latest
+          command: ["node", "src/mock-producer.js"]
+          env:
+            - name: KAFKA_BROKERS
+              valueFrom:
+                configMapKeyRef:
+                  name: plc-waveform-config
+                  key: KAFKA_BROKERS
+            - name: KAFKA_CLIENT_ID
+              value: mock-producer
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault

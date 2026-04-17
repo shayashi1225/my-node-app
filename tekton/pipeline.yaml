@@ -156,13 +156,16 @@ spec:
           - name: namespace
             value: openshift-pipelines
       workspaces:
-        - name: manifest-dir
+        - name: manifest_dir
           workspace: source
       params:
         - name: SCRIPT
           value: |
             set -e
+            cd $(workspaces.manifest_dir.path)
+
             # マニフェスト適用（PVC/ConfigMap/Service/Route は初回のみ変更あり）
+            oc apply -f deploy/imagestream.yaml
             oc apply -f deploy/pvc.yaml
             oc apply -f deploy/configmap.yaml
             oc apply -f deploy/service.yaml
@@ -171,6 +174,9 @@ spec:
             # Deployment のイメージタグを更新して apply
             sed "s|image-registry.openshift-image-registry.svc:5000/plc-waveform/plc-waveform:latest|$(params.image-name):$(params.image-tag)|g" \
               deploy/deployment.yaml | oc apply -f -
+            sed "s|image-registry.openshift-image-registry.svc:5000/plc-waveform/plc-waveform:latest|$(params.image-name):$(params.image-tag)|g" \
+              deploy/deployment-mock-producer.yaml | oc apply -f -
 
             # ロールアウト完了を待機
             oc rollout status deployment/plc-waveform --timeout=3m
+            oc rollout status deployment/plc-mock-producer --timeout=3m
