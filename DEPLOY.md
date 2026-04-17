@@ -68,13 +68,11 @@ oc apply -f tekton/pipeline.yaml
 oc apply -f tekton/trigger-binding.yaml
 oc apply -f tekton/trigger-template.yaml
 oc apply -f tekton/eventlistener.yaml
+oc apply -f tekton/eventlistener-route.yaml
 
-# EventListener の Route（GitHub Webhook エンドポイント）を公開
-oc expose svc el-plc-waveform-listener
-
-# Webhook URL を確認
+# Webhook URL を確認（HTTPS）
 oc get route el-plc-waveform-listener \
-  -o jsonpath='{.spec.host}{"\n"}'
+  -o jsonpath='https://{.spec.host}/{"\n"}'
 ```
 
 ## 5. GitHub Webhook の設定
