@@ -40,5 +40,4 @@ spec:
                   requests:
                     storage: 500Mi
           - name: docker-credentials
-            secret:
-              secretName: registry-credentials
+            emptyDir: {}

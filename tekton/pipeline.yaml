@@ -87,10 +87,35 @@ spec:
         - name: source
           workspace: source
 
-    # ── 3. コンテナイメージビルド & Push ────────────────────────────────
-    - name: build-push
+    # ── 3. 内部レジストリ認証設定（SA トークンで dockerconfig を生成） ──
+    - name: registry-auth
       runAfter:
         - test
+      taskSpec:
+        workspaces:
+          - name: dockerconfig
+        steps:
+          - name: create-config
+            image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+            script: |
+              #!/bin/bash
+              set -e
+              TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+              REGISTRY=image-registry.openshift-image-registry.svc:5000
+              AUTH=$(echo -n "serviceaccount:${TOKEN}" | base64 -w0)
+              mkdir -p $(workspaces.dockerconfig.path)
+              cat > $(workspaces.dockerconfig.path)/config.json <<EOF
+              {"auths":{"${REGISTRY}":{"auth":"${AUTH}"}}}
+              EOF
+              echo "Registry auth config created."
+      workspaces:
+        - name: dockerconfig
+          workspace: docker-credentials
+
+    # ── 4. コンテナイメージビルド & Push ────────────────────────────────
+    - name: build-push
+      runAfter:
+        - registry-auth
       taskRef:
         resolver: cluster
         params:
@@ -117,7 +142,7 @@ spec:
         - name: BUILD_EXTRA_ARGS
           value: "--label git-revision=$(params.git-revision)"
 
-    # ── 4. OpenShift へデプロイ ──────────────────────────────────────────
+    # ── 5. OpenShift へデプロイ ──────────────────────────────────────────
     - name: deploy
       runAfter:
         - build-push
