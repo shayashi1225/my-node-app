@@ -10,6 +10,8 @@ RUN npm ci --omit=dev
 
 FROM registry.access.redhat.com/ubi9/nodejs-20
 
+USER root
+
 WORKDIR /app
 
 COPY --from=builder /app/node_modules ./node_modules
