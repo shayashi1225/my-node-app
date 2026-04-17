@@ -17,7 +17,7 @@ npx jest tests/db.test.js         # db テストのみ実行
 npx jest tests/server.test.js     # server テストのみ実行
 ```
 
-ブラウザで `http://localhost:3000` を開くと波形が表示される。
+ブラウザで `http://localhost:3000` を開くと、PLC1・PLC2 の二つの波形が表示される。
 
 ローカルで Kafka を起動する場合:
 
@@ -27,39 +27,43 @@ docker run -d --name kafka -p 9092:9092 apache/kafka:latest
 
 ## アーキテクチャ
 
-PLCセンサーのリアルタイム波形ビジュアライザー。
+複数の PLC センサーからのリアルタイム波形ビジュアライザー。各 PLC は独立したデータストリームと閾値を持つ。
 
 ```text
-[Kafka: factory-data] → src/server.js (KafkaJS consumer)
-                              ↓ Socket.IO (waveform-data イベント)
-                        src/index.html (uPlot でリアルタイム描画)
-                              ↓ value > THRESHOLD
-                          data.db (SQLite: threshold_events)
+[Kafka: factory-data]   → src/server.js (KafkaJS consumer)
+[Kafka: factory-data-2] →        ↓ Socket.IO (waveform-data イベント)
+                            src/index.html (uPlot でリアルタイム描画)
+                                  ↓ value > THRESHOLD_*
+                            data.db (SQLite: threshold_events)
 ```
 
 ### データフロー
 
 - **メッセージ形式**: `{ ts: number (Unix ms), value: number }`
-- `src/server.js` が Kafka の `factory-data` トピックをコンシュームし、`waveform-data` イベントとして Socket.IO でブロードキャスト
-- `src/index.html` は CDN から読み込んだ Socket.IO クライアントと uPlot でイベントを受信し、スライディングウィンドウ（MAX_POINTS=500点）でグラフを更新
-- uPlot は秒単位の Unix タイムスタンプを要求するため、クライアント側で `ts / 1000` に変換している
+- `src/server.js` は 2 つの Kafka トピック（`factory-data` → PLC1、`factory-data-2` → PLC2）をコンシュームし、`plcId` フィールドを追加して Socket.IO でブロードキャスト
+- `src/index.html` は CDN から読み込んだ Socket.IO クライアントと uPlot で両方のストリームを受信、スライディングウィンドウ（MAX_POINTS=500点）で表示
+- uPlot は秒単位の Unix タイムスタンプを要求するため、クライアント側で `ts / 1000` に変換
 
 ### 実装上の注意
 
 - HTTP サーバーは Express を使わず Node.js 標準の `http` モジュールで実装されている
 - Kafka ブローカーアドレス（`localhost:9092`）・clientId（`visualizer`）・groupId（`viz-group`）は `server.js` にハードコードされており、環境変数での変更は不可
 - `server.js` は `{ handleData, server }` をエクスポートしており、テストから直接インポートして利用する
+- 各 PLC の閾値は独立しており、`THRESHOLD_1` と `THRESHOLD_2` で制御（`THRESHOLD` は PLC1 のデフォルト用）
 
 ### 閾値永続化
 
-`server.js` の `handleData()` が全メッセージを処理し、`value > THRESHOLD` を満たしたものだけ `src/db.js` 経由で SQLite に書き込む。Kafka モード・内部モック両方に適用される。
+`src/server.js` の `handleData()` が全メッセージを処理し、`value > THRESHOLD_*` を満たしたものだけ `src/db.js` 経由で SQLite に書き込む。Kafka モード・内部モック両方に適用される。
 
-- **テーブル**: `threshold_events (id, ts, value, recorded_at)`
+- **テーブル**: `threshold_events (id, ts, value, plc_id, recorded_at)`
 - **DBファイル**: プロジェクトルートの `data.db`（git 管理外）
-- **閾値デフォルト**: `78`（環境変数 `THRESHOLD` で変更可）
+- **マイグレーション**: 既存 DB には `ALTER TABLE` で `plc_id` 列を自動追加
+- **閾値デフォルト**: 
+  - PLC1: `78`（環境変数 `THRESHOLD_1` または `THRESHOLD` で変更可）
+  - PLC2: `78`（環境変数 `THRESHOLD_2` で変更可）
 
 ```bash
-THRESHOLD=50 npm run server
+THRESHOLD_1=50 THRESHOLD_2=70 npm run server
 ```
 
 ### API エンドポイント
@@ -67,15 +71,18 @@ THRESHOLD=50 npm run server
 | パス | 説明 |
 | --- | --- |
 | `GET /` | `src/index.html` を返す |
-| `GET /api/events?minValue=&maxValue=` | 閾値超過イベントを最大200件、ts降順で返す |
-| `GET /api/threshold` | 現在の閾値を `{ threshold: number }` で返す |
+| `GET /api/events?plcId=1&minValue=&maxValue=` | 指定 PLC の閾値超過イベントを最大200件、ts降順で返す |
+| `GET /api/thresholds` | 両方の PLC の閾値を `{ plc1: number, plc2: number }` で返す |
+| `GET /api/threshold` | PLC1 の閾値を `{ threshold: number }` で返す（後方互換性） |
 
 ### モックデータ
 
 | 方法 | 用途 |
 | --- | --- |
-| `USE_MOCK=true` (`npm run server:mock`) | Kafka 不要。サーバー内部でサイン波＋ノイズを 100ms 間隔で emit（値域 約28〜52、閾値 78 を超えない） |
-| `src/mock-producer.js` (`npm run mock-producer`) | Kafka 必須。ランダムウォーク波形を `factory-data` トピックへ送信（値域 20〜80、1ステップ最大 ±1.5） |
+| `USE_MOCK=true` (`npm run server:mock`) | Kafka 不要。PLC1 は サイン波、PLC2 はコサイン波を 100ms 間隔で emit |
+
+**PLC1**: 値域 約29〜51（閾値 78 を超えない）
+**PLC2**: 値域 約57〜85（閾値 78 を約半分超える）
 
 ### テスト設計
 
