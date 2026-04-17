@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="https://unpkg.com/uplot/dist/uPlot.min.css">
+  <script src="https://unpkg.com/uplot/dist/uPlot.iife.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { display: flex; gap: 16px; padding: 16px; font-family: sans-serif; background: #f5f5f5; }
+
+    #events-panel {
+      width: 340px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #events-panel h3 { font-size: 14px; color: #333; }
+    #events-panel h3 span { color: #e53e3e; }
+
+    #search-form {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    #search-form input {
+      width: 80px;
+      padding: 4px 6px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    #search-form label { font-size: 12px; color: #555; }
+    #search-form button {
+      padding: 4px 10px;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    #btn-search { background: #3182ce; color: #fff; }
+    #btn-reset  { background: #e2e8f0; color: #333; }
+
+    #events-list {
+      flex: 1;
+      overflow-y: auto;
+      max-height: 420px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+    }
+    .event-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 10px;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 12px;
+    }
+    .event-row:last-child { border-bottom: none; }
+    .event-row .time { color: #666; }
+    .event-row .val  { font-weight: bold; color: #e53e3e; }
+    .event-empty { padding: 16px; text-align: center; color: #aaa; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div id="chart-container"></div>
+
+  <div id="events-panel">
+    <h3>閾値超過イベント (&gt; <span id="threshold-val">…</span>)</h3>
+    <div id="search-form">
+      <label>最小値 <input type="number" id="min-val" placeholder="例: 65"></label>
+      <label>最大値 <input type="number" id="max-val" placeholder="例: 80"></label>
+      <button id="btn-search">検索</button>
+      <button id="btn-reset">リセット</button>
+    </div>
+    <div id="events-list"><p class="event-empty">読み込み中…</p></div>
+  </div>
+
+  <script>
+    // --- チャート ---
+    const MAX_POINTS = 500;
+    let data = [
+      new Array(MAX_POINTS).fill(null),
+      new Array(MAX_POINTS).fill(null),
+    ];
+    const opts = {
+      title: "Real-time PLC Waveform (100ms)",
+      width: 800,
+      height: 400,
+      scales: { x: { time: true } },
+      series: [{}, { stroke: "red", label: "Voltage" }],
+    };
+    let u = new uPlot(opts, data, document.getElementById("chart-container"));
+
+    // --- イベントパネル ---
+    const listEl = document.getElementById("events-list");
+
+    function fmt(ts) {
+      return new Date(ts).toLocaleTimeString("ja-JP", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    }
+
+    function renderList(events) {
+      if (events.length === 0) {
+        listEl.innerHTML = '<p class="event-empty">該当データなし</p>';
+        return;
+      }
+      listEl.innerHTML = events.map(e =>
+        `<div class="event-row">
+           <span class="time">${fmt(e.ts)}</span>
+           <span class="val">${e.value.toFixed(2)}</span>
+         </div>`
+      ).join("");
+    }
+
+    async function loadEvents(params = {}) {
+      const qs = new URLSearchParams();
+      if (params.minValue != null) qs.set("minValue", params.minValue);
+      if (params.maxValue != null) qs.set("maxValue", params.maxValue);
+      const res = await fetch("/api/events?" + qs);
+      return res.json();
+    }
+
+    // 初期ロード
+    (async () => {
+      const [events, { threshold }] = await Promise.all([
+        loadEvents(),
+        fetch("/api/threshold").then(r => r.json()),
+      ]);
+      document.getElementById("threshold-val").textContent = threshold;
+      renderList(events);
+    })();
+
+    // 検索
+    document.getElementById("btn-search").addEventListener("click", async () => {
+      const min = document.getElementById("min-val").value;
+      const max = document.getElementById("max-val").value;
+      renderList(await loadEvents({
+        minValue: min !== "" ? Number(min) : undefined,
+        maxValue: max !== "" ? Number(max) : undefined,
+      }));
+    });
+    document.getElementById("btn-reset").addEventListener("click", async () => {
+      document.getElementById("min-val").value = "";
+      document.getElementById("max-val").value = "";
+      renderList(await loadEvents());
+    });
+
+    // --- Socket.IO ---
+    const socket = io();
+    socket.on("waveform-data", (payload) => {
+      data[0].shift(); data[0].push(payload.ts / 1000);
+      data[1].shift(); data[1].push(payload.value);
+      u.setData(data);
+    });
+  </script>
+</body>
+</html>
